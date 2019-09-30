@@ -12,96 +12,91 @@
  * the License.
  */
 
-import { Component } from 'react';
+import { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { createMemoryHistory } from 'history';
 import renderCallback from '../utils/renderCallback';
 
-class Wizard extends Component {
-  state = {
+const Wizard = props => {
+  const [state, setState] = useState({
     step: {
       id: null,
     },
     steps: [],
-  };
+  });
 
-  getChildContext() {
-    return {
-      wizard: {
-        go: this.history.go,
-        history: this.history,
-        init: this.init,
-        next: this.next,
-        previous: this.history.goBack,
-        push: this.push,
-        replace: this.replace,
-        ...this.state,
-      },
+  const history = props.history || createMemoryHistory();
+
+  useEffect(() => {
+    const unListen = history.listen(({ pathname }) => setState({ step: pathToStep(pathname) }));
+
+    if (props.onNext) {
+      const { init, ...wizard } = getChildContext().wizard;
+      props.onNext(wizard);
     };
-  }
 
-  componentWillMount() {
-    this.unlisten = this.history.listen(({ pathname }) =>
-      this.setState({ step: this.pathToStep(pathname) })
-    );
+    return () => unListen();
+  }, []);
 
-    if (this.props.onNext) {
-      const { init, ...wizard } = this.getChildContext().wizard;
-      this.props.onNext(wizard);
-    }
-  }
 
-  componentWillUnmount() {
-    this.unlisten();
-  }
-
-  get basename() {
-    return `${this.props.basename}/`;
-  }
-
-  get ids() {
-    return this.state.steps.map(s => s.id);
-  }
-
-  get nextStep() {
-    return this.ids[this.ids.indexOf(this.state.step.id) + 1];
-  }
-
-  history = this.props.history || createMemoryHistory();
-  steps = [];
-
-  pathToStep = pathname => {
-    const id = pathname.replace(this.basename, '');
-    const [step] = this.state.steps.filter(s => s.id === id);
-    return step || this.state.step;
+  const basename = () => {
+    return `${props.basename}/`;
   };
 
-  init = steps => {
-    this.setState({ steps }, () => {
-      const step = this.pathToStep(this.history.location.pathname);
+  const ids = () => {
+    return state.steps.map(s => s.id);
+  };
+
+  const nextStep = () => {
+    return ids[ids.indexOf(state.step.id) + 1];
+  };
+
+  const pathToStep = pathname => {
+    const id = pathname.replace(basename, '');
+    const [step] = state.steps.filter(s => s.id === id);
+    return step || state.step;
+  };
+
+  const init = steps => {
+    setState({ steps }, () => {
+      const step = pathToStep(history.location.pathname);
       if (step.id) {
-        this.setState({ step });
+        setState({ step });
       } else {
-        this.history.replace(`${this.basename}${this.ids[0]}`);
+        history.replace(`${basename}${ids[0]}`);
       }
     });
   };
 
-  push = (step = this.nextStep) => this.history.push(`${this.basename}${step}`);
-  replace = (step = this.nextStep) => this.history.replace(`${this.basename}${step}`);
+  const push = (step = nextStep) => history.push(`${basename}${step}`);
+  const replace = (step = nextStep) => history.replace(`${basename}${step}`);
 
-  next = () => {
-    if (this.props.onNext) {
-      this.props.onNext(this.getChildContext().wizard);
+  const { init, ...wizard } = getChildContext().wizard;
+
+  const next = () => {
+    if (props.onNext) {
+      props.onNext(getChildContext().wizard);
     } else {
-      this.push();
+      push();
     }
   };
 
-  render() {
-    const { init, ...wizard } = this.getChildContext().wizard;
-    return renderCallback(this.props, wizard);
-  }
+  const getChildContext = () => {
+    return {
+      wizard: {
+        go: history.go,
+        history: history,
+        init: init,
+        next: next,
+        previous: history.goBack,
+        push: push,
+        replace: replace,
+        ...state,
+      },
+    };
+  };
+
+  return renderCallback(props, wizard);
 }
 
 Wizard.propTypes = {
